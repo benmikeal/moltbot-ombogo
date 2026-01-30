@@ -146,6 +146,14 @@ try {
     console.log('Starting with empty config');
 }
 
+// Diagnostic logging for API key troubleshooting
+console.log('=== ENV VAR CHECK ===');
+console.log('ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '[SET - ' + process.env.ANTHROPIC_API_KEY.slice(0,10) + '...]' : '[MISSING]');
+console.log('AI_GATEWAY_BASE_URL:', process.env.AI_GATEWAY_BASE_URL || '[NOT SET - using built-in catalog]');
+console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '[SET]' : '[MISSING]');
+console.log('TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? '[SET]' : '[MISSING]');
+console.log('=====================');
+
 // Ensure nested objects exist
 config.agents = config.agents || {};
 config.agents.defaults = config.agents.defaults || {};
@@ -239,6 +247,9 @@ if (isOpenAI) {
     config.agents.defaults.model.primary = 'openai/gpt-5.2';
 } else if (baseUrl) {
     console.log('Configuring Anthropic provider with base URL:', baseUrl);
+    if (!process.env.ANTHROPIC_API_KEY) {
+        console.error('WARNING: baseUrl set but ANTHROPIC_API_KEY missing - API calls will fail with 401!');
+    }
     config.models = config.models || {};
     config.models.providers = config.models.providers || {};
     const providerConfig = {
@@ -263,6 +274,12 @@ if (isOpenAI) {
     config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5-20251101';
 } else {
     // Default to Anthropic without custom base URL (uses built-in pi-ai catalog)
+    console.log('Using built-in Anthropic catalog (no custom baseUrl)');
+    if (!process.env.ANTHROPIC_API_KEY) {
+        console.error('WARNING: Using built-in catalog but ANTHROPIC_API_KEY missing - API calls will fail with 401!');
+    } else {
+        console.log('ANTHROPIC_API_KEY is set, should work with built-in catalog');
+    }
     config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5';
 }
 
