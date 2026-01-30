@@ -187,7 +187,9 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
     config.channels.telegram = config.channels.telegram || {};
     config.channels.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN;
     config.channels.telegram.enabled = true;
-    config.channels.telegram.dmPolicy = process.env.TELEGRAM_DM_POLICY || 'pairing';
+    // Use allowlist mode with approved user IDs
+    config.channels.telegram.dmPolicy = process.env.TELEGRAM_DM_POLICY || 'allowlist';
+    config.channels.telegram.allowFrom = config.channels.telegram.allowFrom || [129633141];
 }
 
 // Discord configuration
@@ -207,40 +209,22 @@ if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
     config.channels.slack.enabled = true;
 }
 
-// Base URL override (e.g., for Cloudflare AI Gateway)
-// Usage: Set AI_GATEWAY_BASE_URL or ANTHROPIC_BASE_URL to your endpoint like:
-//   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic
-//   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/openai
-const baseUrl = process.env.AI_GATEWAY_BASE_URL || process.env.ANTHROPIC_BASE_URL || '';
-const isOpenAI = baseUrl.endsWith('/openai');
+// ============================================================
+// MULTI-PROVIDER MODEL CONFIGURATION
+// ============================================================
+// Configure all available AI providers based on environment variables
+// Per OpenClaw docs: https://docs.openclaw.ai/concepts/model-providers
 
-if (isOpenAI) {
-    // Create custom openai provider config with baseUrl override
-    // Omit apiKey so moltbot falls back to OPENAI_API_KEY env var
-    console.log('Configuring OpenAI provider with base URL:', baseUrl);
-    config.models = config.models || {};
-    config.models.providers = config.models.providers || {};
-    config.models.providers.openai = {
-        baseUrl: baseUrl,
-        api: 'openai-responses',
-        models: [
-            { id: 'gpt-5.2', name: 'GPT-5.2', contextWindow: 200000 },
-            { id: 'gpt-5', name: 'GPT-5', contextWindow: 200000 },
-            { id: 'gpt-4.5-preview', name: 'GPT-4.5 Preview', contextWindow: 128000 },
-        ]
-    };
-    // Add models to the allowlist so they appear in /models
-    config.agents.defaults.models = config.agents.defaults.models || {};
-    config.agents.defaults.models['openai/gpt-5.2'] = { alias: 'GPT-5.2' };
-    config.agents.defaults.models['openai/gpt-5'] = { alias: 'GPT-5' };
-    config.agents.defaults.models['openai/gpt-4.5-preview'] = { alias: 'GPT-4.5' };
-    config.agents.defaults.model.primary = 'openai/gpt-5.2';
-} else if (baseUrl) {
-    console.log('Configuring Anthropic provider with base URL:', baseUrl);
-    config.models = config.models || {};
-    config.models.providers = config.models.providers || {};
-    const providerConfig = {
-        baseUrl: baseUrl,
+config.models = config.models || {};
+config.models.providers = config.models.providers || {};
+config.agents.defaults.models = config.agents.defaults.models || {};
+
+const baseUrl = process.env.AI_GATEWAY_BASE_URL || process.env.ANTHROPIC_BASE_URL || '';
+
+// Anthropic (Claude) - primary provider
+if (process.env.ANTHROPIC_API_KEY || baseUrl) {
+    console.log('Configuring Anthropic provider');
+    const anthropicConfig = {
         api: 'anthropic-messages',
         models: [
             { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', contextWindow: 200000 },
@@ -248,27 +232,132 @@ if (isOpenAI) {
             { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', contextWindow: 200000 },
         ]
     };
-    // Include API key in provider config if set (required when using custom baseUrl)
-    if (process.env.ANTHROPIC_API_KEY) {
-        providerConfig.apiKey = process.env.ANTHROPIC_API_KEY;
+    if (baseUrl && !baseUrl.endsWith('/openai')) {
+        anthropicConfig.baseUrl = baseUrl;
     }
-    config.models.providers.anthropic = providerConfig;
-    // Add models to the allowlist so they appear in /models
-    config.agents.defaults.models = config.agents.defaults.models || {};
-    config.agents.defaults.models['anthropic/claude-opus-4-5-20251101'] = { alias: 'Opus 4.5' };
-    config.agents.defaults.models['anthropic/claude-sonnet-4-5-20250929'] = { alias: 'Sonnet 4.5' };
-    config.agents.defaults.models['anthropic/claude-haiku-4-5-20251001'] = { alias: 'Haiku 4.5' };
-    config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5-20251101';
-} else {
-    // Default to Anthropic without custom base URL (uses built-in pi-ai catalog)
-    config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5';
+    if (process.env.ANTHROPIC_API_KEY) {
+        anthropicConfig.apiKey = process.env.ANTHROPIC_API_KEY;
+    }
+    config.models.providers.anthropic = anthropicConfig;
+    config.agents.defaults.models['anthropic/claude-opus-4-5-20251101'] = { alias: 'opus' };
+    config.agents.defaults.models['anthropic/claude-sonnet-4-5-20250929'] = { alias: 'sonnet' };
+    config.agents.defaults.models['anthropic/claude-haiku-4-5-20251001'] = { alias: 'haiku' };
 }
+
+// OpenAI (GPT)
+if (process.env.OPENAI_API_KEY) {
+    console.log('Configuring OpenAI provider');
+    const openaiConfig = {
+        api: 'openai-responses',
+        models: [
+            { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000 },
+            { id: 'gpt-4o-mini', name: 'GPT-4o Mini', contextWindow: 128000 },
+        ]
+    };
+    if (baseUrl && baseUrl.endsWith('/openai')) {
+        openaiConfig.baseUrl = baseUrl;
+    }
+    config.models.providers.openai = openaiConfig;
+    config.agents.defaults.models['openai/gpt-4o'] = { alias: 'gpt' };
+    config.agents.defaults.models['openai/gpt-4o-mini'] = { alias: 'gpt-mini' };
+}
+
+// Moonshot (Kimi)
+if (process.env.MOONSHOT_API_KEY) {
+    console.log('Configuring Moonshot provider');
+    config.models.providers.moonshot = {
+        baseUrl: 'https://api.moonshot.ai/v1',
+        api: 'openai-completions',
+        models: [
+            { id: 'kimi-k2.5', name: 'Kimi K2.5', contextWindow: 256000 },
+            { id: 'kimi-k2-turbo-preview', name: 'Kimi K2 Turbo', contextWindow: 256000 },
+        ]
+    };
+    config.agents.defaults.models['moonshot/kimi-k2.5'] = { alias: 'kimi' };
+    config.agents.defaults.models['moonshot/kimi-k2-turbo-preview'] = { alias: 'kimi-turbo' };
+}
+
+// xAI (Grok)
+if (process.env.XAI_API_KEY) {
+    console.log('Configuring xAI provider');
+    config.models.providers.xai = {
+        baseUrl: 'https://api.x.ai/v1',
+        api: 'openai-completions',
+        models: [
+            { id: 'grok-2', name: 'Grok 2', contextWindow: 131072 },
+            { id: 'grok-2-mini', name: 'Grok 2 Mini', contextWindow: 131072 },
+        ]
+    };
+    config.agents.defaults.models['xai/grok-2'] = { alias: 'grok' };
+    config.agents.defaults.models['xai/grok-2-mini'] = { alias: 'grok-mini' };
+}
+
+// Set primary model and fallbacks
+// Use Sonnet as primary (balanced), with fallbacks to other providers
+config.agents.defaults.model.primary = 'anthropic/claude-sonnet-4-5-20250929';
+config.agents.defaults.model.fallbacks = [];
+if (process.env.OPENAI_API_KEY) config.agents.defaults.model.fallbacks.push('openai/gpt-4o');
+if (process.env.MOONSHOT_API_KEY) config.agents.defaults.model.fallbacks.push('moonshot/kimi-k2.5');
+if (process.env.XAI_API_KEY) config.agents.defaults.model.fallbacks.push('xai/grok-2');
+
+console.log('Primary model:', config.agents.defaults.model.primary);
+console.log('Fallback models:', config.agents.defaults.model.fallbacks);
 
 // Write updated config
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 console.log('Configuration updated successfully');
 console.log('Config:', JSON.stringify(config, null, 2));
 EOFNODE
+
+# ============================================================
+# CREATE SOUL.MD (Agent Identity)
+# ============================================================
+# Per OpenClaw docs: SOUL.md defines persona, tone, boundaries
+# Location: workspace root (/root/clawd/SOUL.md)
+
+SOUL_FILE="/root/clawd/SOUL.md"
+mkdir -p /root/clawd
+
+# Only create if doesn't exist (preserve user edits)
+if [ ! -f "$SOUL_FILE" ]; then
+    echo "Creating SOUL.md..."
+    cat > "$SOUL_FILE" << 'EOFSOUL'
+# Syder — Foundational Principles
+
+## 1. Bias Toward Shipping
+Don't deliberate when you can act. Software is clay, not crystal. A working thing today beats a perfect thing never. When uncertain between polish and progress, choose progress.
+
+## 2. Autonomous by Default
+Operate in loops, not queues waiting for approval. Human-in-the-loop is a bottleneck pattern—reserve it for genuine decision gates (money movement, external comms, irreversible state). Everything else: execute, report, move on.
+
+## 3. Hunt Failure Domains, Kill Them Permanently
+When something breaks, don't patch the symptom. Find the category of failure and eliminate it structurally. One fix should close a class of problems, not one instance.
+
+## 4. Events Are Truth, State Is Derived
+All reality is a sequence of events. State is just a projection. Reports are computed, not stored. Invariants must always hold—if they don't, the system is lying.
+
+## 5. Expose Capabilities, Not Screens
+Think in capability graphs, not UI flows. CLI and API-first. GUIs are skins over capability—never let the skin constrain what's possible.
+
+## 6. Intelligent Laziness
+Never re-solve a solved problem. Leverage existing infrastructure ruthlessly. The goal is outcomes, not effort. Elegance is doing more with less.
+
+## 7. Context Is Wealth
+Michael operates across hotels, commodities, mining, and software simultaneously. Hold the full picture. Connect dots across domains. An insight from trade finance might solve a hotel operations problem.
+
+## 8. Capability Multiplier, Not Bottleneck
+You exist to extend reach, not add friction. If a human could do it with enough time, you should do it in less time with less supervision.
+
+## 9. Build for Exit
+Every system should have a path to standalone value. Micro-SaaS economics. What's the acquisition story? What's the leverage?
+
+## 10. Fresh Instances, Clean Loops
+When in doubt, reset context and attack fresh. The Ralph loop philosophy—one task, one loop, clean state. Accumulated cruft causes accumulated errors.
+EOFSOUL
+    echo "SOUL.md created"
+else
+    echo "SOUL.md already exists, preserving"
+fi
 
 # ============================================================
 # START GATEWAY

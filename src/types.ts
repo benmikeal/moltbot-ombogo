@@ -14,6 +14,8 @@ export interface MoltbotEnv {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
   OPENAI_API_KEY?: string;
+  KIMI_API_KEY?: string; // Moonshot AI (Kimi) - mapped to MOONSHOT_API_KEY in container
+  XAI_API_KEY?: string; // xAI (Grok)
   MOLTBOT_GATEWAY_TOKEN?: string; // Gateway token (mapped to CLAWDBOT_GATEWAY_TOKEN for container)
 
   CLAWDBOT_BIND_MODE?: string;
