@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "moltbot-sandbox",
+  "name": "moltbot-ombogo",
   "main": "src/index.ts",
   "compatibility_date": "2025-05-06",
   "compatibility_flags": ["nodejs_compat"],
@@ -70,6 +70,13 @@
   "browser": {
     "binding": "BROWSER",
   },
+  // Custom routes for ombogo.org domain
+  "routes": [
+    {
+      "pattern": "ombogo.org/*",
+      "zone_name": "ombogo.org",
+    },
+  ],
   // Note: CF_ACCOUNT_ID should be set via `wrangler secret put CF_ACCOUNT_ID`
   // Secrets to configure via `wrangler secret put`:
   // - ANTHROPIC_API_KEY: Your Anthropic API key
