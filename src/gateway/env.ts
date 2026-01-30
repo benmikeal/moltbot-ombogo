@@ -29,8 +29,7 @@ export function buildEnvVars(env: MoltbotEnv): Record<string, string> {
     envVars.OPENAI_API_KEY = env.OPENAI_API_KEY;
   }
   // Additional AI providers
-  // Map KIMI_API_KEY to MOONSHOT_API_KEY (OpenClaw expects MOONSHOT_API_KEY)
-  if (env.KIMI_API_KEY) envVars.MOONSHOT_API_KEY = env.KIMI_API_KEY;
+  if (env.KIMI_API_KEY) envVars.KIMI_API_KEY = env.KIMI_API_KEY;
   if (env.XAI_API_KEY) envVars.XAI_API_KEY = env.XAI_API_KEY;
 
   // Pass base URL (used by start-moltbot.sh to determine provider)
