@@ -50,6 +50,25 @@ describe('mountR2Storage', () => {
       expect(result).toBe(false);
     });
 
+    it('returns false when CF_ACCOUNT_ID is not a valid 32-char hex string', async () => {
+      const { sandbox } = createMockSandbox();
+      const env = createMockEnv({
+        R2_ACCESS_KEY_ID: 'key123',
+        R2_SECRET_ACCESS_KEY: 'secret',
+        CF_ACCOUNT_ID: 'invalid-account-id', // Not a 32-char hex string
+      });
+
+      const result = await mountR2Storage(sandbox, env);
+
+      expect(result).toBe(false);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('CF_ACCOUNT_ID format invalid'),
+        18, // length of 'invalid-account-id'
+        'chars starting with:',
+        'invalid-...'
+      );
+    });
+
     it('returns false when all R2 credentials are missing', async () => {
       const { sandbox } = createMockSandbox();
       const env = createMockEnv();
@@ -58,7 +77,8 @@ describe('mountR2Storage', () => {
 
       expect(result).toBe(false);
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('R2 storage not configured')
+        'R2 storage not configured - missing secrets:',
+        expect.stringContaining('R2_ACCESS_KEY_ID')
       );
     });
   });
@@ -66,10 +86,11 @@ describe('mountR2Storage', () => {
   describe('mounting behavior', () => {
     it('mounts R2 bucket when credentials provided and not already mounted', async () => {
       const { sandbox, mountBucketMock } = createMockSandbox({ mounted: false });
+      // Use valid 32-char hex account ID
       const env = createMockEnvWithR2({
         R2_ACCESS_KEY_ID: 'key123',
         R2_SECRET_ACCESS_KEY: 'secret',
-        CF_ACCOUNT_ID: 'account123',
+        CF_ACCOUNT_ID: 'a1b2c3d4e5f6789012345678abcdef00',
       });
 
       const result = await mountR2Storage(sandbox, env);
@@ -79,7 +100,7 @@ describe('mountR2Storage', () => {
         'moltbot-data',
         '/data/moltbot',
         {
-          endpoint: 'https://account123.r2.cloudflarestorage.com',
+          endpoint: 'https://a1b2c3d4e5f6789012345678abcdef00.r2.cloudflarestorage.com',
           credentials: {
             accessKeyId: 'key123',
             secretAccessKey: 'secret',

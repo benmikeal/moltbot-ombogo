@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types';
 import { createAccessMiddleware } from '../auth';
-import { ensureMoltbotGateway, findExistingMoltbotProcess, mountR2Storage, syncToR2, waitForProcess } from '../gateway';
-import { R2_MOUNT_PATH } from '../config';
+import { ensureMoltbotGateway, findExistingMoltbotProcess, waitForProcess } from '../gateway';
+import { syncToR2Direct, getLastSyncDirect } from '../gateway/sync-direct';
 
 // CLI commands can take 10-15 seconds to complete due to WebSocket connection overhead
 const CLI_TIMEOUT_MS = 20000;
@@ -174,61 +174,41 @@ adminApi.post('/devices/approve-all', async (c) => {
 
 // GET /api/admin/storage - Get R2 storage status and last sync time
 adminApi.get('/storage', async (c) => {
-  const sandbox = c.get('sandbox');
-  const hasCredentials = !!(
-    c.env.R2_ACCESS_KEY_ID && 
-    c.env.R2_SECRET_ACCESS_KEY && 
-    c.env.CF_ACCOUNT_ID
-  );
-
-  // Check which credentials are missing
-  const missing: string[] = [];
-  if (!c.env.R2_ACCESS_KEY_ID) missing.push('R2_ACCESS_KEY_ID');
-  if (!c.env.R2_SECRET_ACCESS_KEY) missing.push('R2_SECRET_ACCESS_KEY');
-  if (!c.env.CF_ACCOUNT_ID) missing.push('CF_ACCOUNT_ID');
+  // Check if R2 bucket binding is available (this is the native binding, not s3fs mount)
+  const hasBucketBinding = !!c.env.MOLTBOT_BUCKET;
 
   let lastSync: string | null = null;
 
-  // If R2 is configured, check for last sync timestamp
-  if (hasCredentials) {
-    try {
-      // Mount R2 if not already mounted
-      await mountR2Storage(sandbox, c.env);
-      
-      // Check for sync marker file
-      const proc = await sandbox.startProcess(`cat ${R2_MOUNT_PATH}/.last-sync 2>/dev/null || echo ""`);
-      await waitForProcess(proc, 5000);
-      const logs = await proc.getLogs();
-      const timestamp = logs.stdout?.trim();
-      if (timestamp && timestamp !== '') {
-        lastSync = timestamp;
-      }
-    } catch {
-      // Ignore errors checking sync status
-    }
+  if (hasBucketBinding) {
+    // Get last sync timestamp directly from R2
+    lastSync = await getLastSyncDirect(c.env);
   }
 
   return c.json({
-    configured: hasCredentials,
-    missing: missing.length > 0 ? missing : undefined,
+    configured: hasBucketBinding,
+    method: 'direct', // Using direct R2 API, not s3fs mount
     lastSync,
-    message: hasCredentials 
-      ? 'R2 storage is configured. Your data will persist across container restarts.'
-      : 'R2 storage is not configured. Paired devices and conversations will be lost when the container restarts.',
+    message: hasBucketBinding
+      ? lastSync
+        ? 'R2 storage is configured. Your data will persist across container restarts.'
+        : 'R2 storage is configured but no backup exists yet. Click "Backup Now" to create one.'
+      : 'R2 bucket binding not configured in wrangler.jsonc.',
   });
 });
 
 // POST /api/admin/storage/sync - Trigger a manual sync to R2
 adminApi.post('/storage/sync', async (c) => {
   const sandbox = c.get('sandbox');
-  
-  const result = await syncToR2(sandbox, c.env);
-  
+
+  // Use direct R2 sync (no s3fs mount required)
+  const result = await syncToR2Direct(sandbox, c.env);
+
   if (result.success) {
     return c.json({
       success: true,
-      message: 'Sync completed successfully',
+      message: `Backup completed: ${result.filesBackedUp} files`,
       lastSync: result.lastSync,
+      filesBackedUp: result.filesBackedUp,
     });
   } else {
     const status = result.error?.includes('not configured') ? 400 : 500;

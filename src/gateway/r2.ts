@@ -35,7 +35,19 @@ async function isR2Mounted(sandbox: Sandbox): Promise<boolean> {
 export async function mountR2Storage(sandbox: Sandbox, env: MoltbotEnv): Promise<boolean> {
   // Skip if R2 credentials are not configured
   if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.CF_ACCOUNT_ID) {
-    console.log('R2 storage not configured (missing R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, or CF_ACCOUNT_ID)');
+    const missing: string[] = [];
+    if (!env.R2_ACCESS_KEY_ID) missing.push('R2_ACCESS_KEY_ID');
+    if (!env.R2_SECRET_ACCESS_KEY) missing.push('R2_SECRET_ACCESS_KEY');
+    if (!env.CF_ACCOUNT_ID) missing.push('CF_ACCOUNT_ID');
+    console.log('R2 storage not configured - missing secrets:', missing.join(', '));
+    return false;
+  }
+
+  // Validate CF_ACCOUNT_ID format (should be 32-char hex string)
+  const accountIdValid = /^[a-f0-9]{32}$/i.test(env.CF_ACCOUNT_ID);
+  if (!accountIdValid) {
+    console.error('CF_ACCOUNT_ID format invalid - expected 32-char hex string, got:',
+      env.CF_ACCOUNT_ID.length, 'chars starting with:', env.CF_ACCOUNT_ID.slice(0, 8) + '...');
     return false;
   }
 
@@ -59,14 +71,25 @@ export async function mountR2Storage(sandbox: Sandbox, env: MoltbotEnv): Promise
     return true;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
+    const endpoint = `https://${env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`;
     console.log('R2 mount error:', errorMessage);
-    
+    console.log('R2 mount details - bucket:', R2_BUCKET_NAME, 'endpoint:', endpoint);
+
+    // Common error diagnosis
+    if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+      console.error('R2 AUTH ERROR: Access denied. Check that R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are valid and have read/write permissions on bucket:', R2_BUCKET_NAME);
+    } else if (errorMessage.includes('404') || errorMessage.includes('NoSuchBucket')) {
+      console.error('R2 BUCKET ERROR: Bucket not found. Verify bucket "moltbot-data" exists in your R2 console.');
+    } else if (errorMessage.includes('InvalidAccessKeyId')) {
+      console.error('R2 KEY ERROR: Invalid access key. The R2_ACCESS_KEY_ID may have been deleted or regenerated.');
+    }
+
     // Check again if it's mounted - the error might be misleading
     if (await isR2Mounted(sandbox)) {
       console.log('R2 bucket is mounted despite error');
       return true;
     }
-    
+
     // Don't fail if mounting fails - moltbot can still run without persistent storage
     console.error('Failed to mount R2 bucket:', err);
     return false;

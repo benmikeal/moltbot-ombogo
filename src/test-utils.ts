@@ -19,12 +19,14 @@ export function createMockEnv(overrides: Partial<MoltbotEnv> = {}): MoltbotEnv {
 
 /**
  * Create a mock env with R2 credentials configured
+ * Uses a valid 32-char hex account ID for testing
  */
 export function createMockEnvWithR2(overrides: Partial<MoltbotEnv> = {}): MoltbotEnv {
   return createMockEnv({
     R2_ACCESS_KEY_ID: 'test-key-id',
     R2_SECRET_ACCESS_KEY: 'test-secret-key',
-    CF_ACCOUNT_ID: 'test-account-id',
+    // Valid 32-char hex account ID for tests
+    CF_ACCOUNT_ID: 'e6db7e81ff35e7aff110a4a779b6f22a',
     ...overrides,
   });
 }

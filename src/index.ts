@@ -26,7 +26,8 @@ import { getSandbox, Sandbox, type SandboxOptions } from '@cloudflare/sandbox';
 import type { AppEnv, MoltbotEnv } from './types';
 import { MOLTBOT_PORT } from './config';
 import { createAccessMiddleware } from './auth';
-import { ensureMoltbotGateway, findExistingMoltbotProcess, syncToR2 } from './gateway';
+import { ensureMoltbotGateway, findExistingMoltbotProcess } from './gateway';
+import { syncToR2Direct } from './gateway/sync-direct';
 import { publicRoutes, api, adminUi, debug, cdp } from './routes';
 import loadingPageHtml from './assets/loading.html';
 import configErrorHtml from './assets/config-error.html';
@@ -394,7 +395,7 @@ async function scheduled(
   const sandbox = getSandbox(env.Sandbox, 'moltbot', options);
 
   console.log('[cron] Starting backup sync to R2...');
-  const result = await syncToR2(sandbox, env);
+  const result = await syncToR2Direct(sandbox, env);
   
   if (result.success) {
     console.log('[cron] Backup sync completed successfully at', result.lastSync);
